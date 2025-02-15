@@ -51,7 +51,7 @@ public class DefaultPersonService implements PersonService {
         personRepository.findById(id)
                 .orElseThrow(() -> {
                     logger.error("Person with ID {} not found", id);
-                    return new PersonNotFoundException("Pessoa não encontrada");
+                    return new PersonNotFoundException("Person not found");
                 });
         personRepository.deleteById(id); // Exclui a pessoa pelo ID
         logger.info("Person with ID {} successfully deleted", id);
@@ -66,7 +66,7 @@ public class DefaultPersonService implements PersonService {
         // Se não houver pessoas, lança uma exceção
         if (persons.isEmpty()) {
             logger.error("No persons found");
-            throw new EmptyPersonListException("Nenhuma pessoa encontrada");
+            throw new EmptyPersonListException("Person not found");
         }
 
         // Mapeia cada pessoa para um DTO contendo o nome e os totais das transações
@@ -87,7 +87,7 @@ public class DefaultPersonService implements PersonService {
         // Se não houver pessoas, lança uma exceção
         if (persons.isEmpty()) {
             logger.error("No persons found");
-            throw new EmptyPersonListException("Nenhuma pessoa encontrada");
+            throw new EmptyPersonListException("Person not found");
         }
 
         // Converte cada entidade Person para o DTO correspondente

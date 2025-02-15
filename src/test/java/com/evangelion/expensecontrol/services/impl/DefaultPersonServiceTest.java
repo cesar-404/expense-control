@@ -2,6 +2,7 @@ package com.evangelion.expensecontrol.services.impl;
 
 import com.evangelion.expensecontrol.dtos.person.PersonDTO;
 import com.evangelion.expensecontrol.dtos.person.PersonResponseDTO;
+import com.evangelion.expensecontrol.dtos.person.PersonWithTotalDTO;
 import com.evangelion.expensecontrol.dtos.transaction.TotalTransactionDTO;
 import com.evangelion.expensecontrol.exceptions.EmptyPersonListException;
 import com.evangelion.expensecontrol.exceptions.PersonNotFoundException;
@@ -17,7 +18,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -52,7 +52,6 @@ class DefaultPersonServiceTest {
 
     @Test
     void shouldCreatePersonSuccessfully() {
-
         when(personMapper.toEntity(mockPersonDto)).thenReturn(mockPerson);
         when(personRepository.save(mockPerson)).thenReturn(mockPerson);
         when(personMapper.toDto(mockPerson)).thenReturn(mockPersonResponseDTO);
@@ -61,9 +60,11 @@ class DefaultPersonServiceTest {
 
         assertNotNull(createdPerson);
         assertEquals(mockPersonDto.name(), createdPerson.name());
-        verify(personMapper, times(1)).toEntity(mockPersonDto);
-        verify(personRepository, times(1)).save(mockPerson);
-        verify(personMapper, times(1)).toDto(mockPerson);
+
+        verify(personMapper).toEntity(mockPersonDto);
+        verify(personRepository).save(mockPerson);
+        verify(personMapper).toDto(mockPerson);
+        verifyNoMoreInteractions(personMapper, personRepository);
     }
 
     @Test
@@ -72,84 +73,94 @@ class DefaultPersonServiceTest {
 
         defaultPersonService.deletePersonById(1L);
 
-        verify(personRepository, times(1)).findById(1L);
-        verify(personRepository, times(1)).deleteById(1L);
+        verify(personRepository).findById(1L);
+        verify(personRepository).deleteById(1L);
+        verifyNoMoreInteractions(personRepository);
     }
 
     @Test
-    void shouldDeletePersonFailed() {
-        when(personRepository.findById(1L)).thenReturn(Optional.of(mockPerson));
-        doThrow(new PersonNotFoundException("Person not found")).when(personRepository).deleteById(1L);
+    void shouldThrowExceptionWhenDeletingNonExistentPerson() {
+        when(personRepository.findById(1L)).thenReturn(Optional.empty());
 
-        Exception exception = assertThrows(PersonNotFoundException.class, () -> defaultPersonService.deletePersonById(1L));
+        Exception exception = assertThrows(PersonNotFoundException.class, () ->
+                defaultPersonService.deletePersonById(1L));
+
         assertEquals("Person not found", exception.getMessage());
 
-        verify(personRepository, times(1)).findById(1L);
-        verify(personRepository, times(1)).deleteById(1L);
+        verify(personRepository).findById(1L);
+        verify(personRepository, never()).deleteById(1L);
     }
 
     @Test
     void shouldReturnAListOfPersonsWithTotalsSuccessfully() {
-        Person person1 = new Person(1L, "Mario Mario", 24);
-        Person person2 = new Person(2L, "Luigi Mario", 22);
-        List<Person> personList = new ArrayList<>();
-        personList.add(person1);
-        personList.add(person2);
-        TotalTransactionDTO dto1 = new TotalTransactionDTO(BigDecimal.valueOf(10),
-                BigDecimal.valueOf(20),
-                BigDecimal.valueOf(30));
-        TotalTransactionDTO dto2 = new TotalTransactionDTO(BigDecimal.valueOf(20),
-                BigDecimal.valueOf(30),
-                BigDecimal.valueOf(40));
+        List<Person> personList = List.of(
+                new Person(1L, "Mario Mario", 24),
+                new Person(2L, "Luigi Mario", 22)
+        );
+
+        TotalTransactionDTO dto1 = new TotalTransactionDTO(BigDecimal.TEN, BigDecimal.valueOf(20), BigDecimal.valueOf(30));
+        TotalTransactionDTO dto2 = new TotalTransactionDTO(BigDecimal.valueOf(20), BigDecimal.valueOf(30), BigDecimal.valueOf(40));
 
         when(personRepository.findAll()).thenReturn(personList);
         when(transactionService.getPersonTotals(1L)).thenReturn(dto1);
         when(transactionService.getPersonTotals(2L)).thenReturn(dto2);
 
+        List<PersonWithTotalDTO> result = defaultPersonService.getPersonsWithTotals();
 
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        assertEquals("Mario Mario", result.get(0).name());
+        assertEquals(dto1, result.get(0).totals());
+        assertEquals("Luigi Mario", result.get(1).name());
+        assertEquals(dto2, result.get(1).totals());
 
-
-
+        verify(personRepository).findAll();
+        verify(transactionService).getPersonTotals(1L);
+        verify(transactionService).getPersonTotals(2L);
+        verifyNoMoreInteractions(personRepository, transactionService);
     }
 
     @Test
-    void shouldReturnAListOfPersonsWithTotalsFailed() {
-        List<Person> personList = new ArrayList<>();
-
-        when(personRepository.findAll()).thenReturn(personList);
+    void shouldThrowExceptionWhenPersonListIsEmpty() {
+        when(personRepository.findAll()).thenReturn(List.of());
 
         assertThrows(EmptyPersonListException.class, () -> defaultPersonService.getPersonsWithTotals());
-        verify(personRepository, times(1)).findAll();
+
+        verify(personRepository).findAll();
+        verifyNoMoreInteractions(personRepository);
     }
 
     @Test
     void shouldReturnAListOfAllPersons() {
-        Person person1 = new Person(1L, "Mario Mario", 24);
-        Person person2 = new Person(2L, "Luigi Mario", 22);
-        List<Person> personListTest = new ArrayList<>();
-        personListTest.add(person1);
-        personListTest.add(person2);
+        List<Person> personList = List.of(
+                new Person(1L, "Mario Mario", 24),
+                new Person(2L, "Luigi Mario", 22)
+        );
 
-        when(personRepository.findAll()).thenReturn(personListTest);
-        when(personMapper.toDto(person1)).thenReturn(new PersonResponseDTO(1L, "Mario Mario", 24));
-        when(personMapper.toDto(person2)).thenReturn(new PersonResponseDTO(2L, "Luigi Mario", 22));
+        when(personRepository.findAll()).thenReturn(personList);
+        when(personMapper.toDto(any(Person.class)))
+                .thenReturn(new PersonResponseDTO(1L, "Mario Mario", 24))
+                .thenReturn(new PersonResponseDTO(2L, "Luigi Mario", 22));
 
         List<PersonResponseDTO> result = defaultPersonService.getAllPersons();
 
         assertNotNull(result);
         assertEquals(2, result.size());
-
-        assertEquals("Mario Mario", result.getFirst().name());
+        assertEquals("Mario Mario", result.get(0).name());
         assertEquals("Luigi Mario", result.get(1).name());
+
+        verify(personRepository).findAll();
+        verify(personMapper, times(2)).toDto(any(Person.class));
+        verifyNoMoreInteractions(personRepository, personMapper);
     }
 
     @Test
-    void shouldReturnAListOfAllPersonsFailed() {
-        ArrayList<Person> persons = new ArrayList<>();
-
-        when(personRepository.findAll()).thenReturn(persons);
+    void shouldThrowExceptionWhenGettingAllPersonsAndListIsEmpty() {
+        when(personRepository.findAll()).thenReturn(List.of());
 
         assertThrows(EmptyPersonListException.class, () -> defaultPersonService.getAllPersons());
-        verify(personRepository, times(1)).findAll();
+
+        verify(personRepository).findAll();
+        verifyNoMoreInteractions(personRepository);
     }
 }
